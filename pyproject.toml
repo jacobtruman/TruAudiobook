@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+
+[project]
+name = 'TruAudiobook'
+version = '0.0.1'
+description='A tool for fetching audiobooks'
+
+authors = [
+    {name = "Jacob Truman", email="jacob.truman@gmail.com"},
+]
+
+dependencies = [
+    "requests",
+    "audible>=0.8.2",
+    "TruLogger",
+]
+
+requires-python = ">=3.7, <4"
+
+[project.urls]
+homepage = "https://github.com/jacobtruman/TruAudiobook"
+documentation = "https://github.com/jacobtruman/TruAudiobook"
+repository = "https://github.com/jacobtruman/TruAudiobook"
+
+[project.scripts]
+truaudiobook = 'tru_audiobook.scripts.truaudiobook:main'

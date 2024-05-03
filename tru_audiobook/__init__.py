@@ -17,6 +17,7 @@ class TruAudiobook:
             dry_run: bool = False,
             quiet: bool = False,
             verbose: bool = False,
+            dev: bool = False,
             audible_authfile: str = '~/.config/truaudiobook/audible.json',
             book_data_file: str = '~/Audiobooks/book_data.json',
             destination_dir: str = '~/Audiobooks',
@@ -27,6 +28,7 @@ class TruAudiobook:
         self.dry_run = dry_run
         self.quiet = quiet
         self.verbose = verbose
+        self.dev = dev
         self.book_data_file = book_data_file.replace('~', home)
         self.base_destination_dir = destination_dir.replace('~', home)
         self._destination_dir = None
@@ -242,31 +244,28 @@ class TruAudiobook:
 
         return chapters
 
-    def process_contents(self, data: dict):
+    def download_and_process(
+            self,
+            data: dict,
+            download_dir: str,
+            clean_title: str,
+            cover_image_url: str,
+            author: str,
+            date: str
+    ) -> bool:
         """
-        Process the contents of the audiobook
+        Download and process into specified directory
         :param data: audiobook data
+        :param download_dir: Directory in which to download
+        :param clean_title: Clean title
+        :param cover_image_url: Cover image url
+        :param author: Author name
+        :param date: Release date of audiobook
         :return: True if successful, else False
         """
-
         spine = data['spine']
         buid = data['-odread-buid']
         bonafides = data['-odread-bonafides-d']
-        author = self.get_author_from_data(data)
-        title_dict = data.get('title')
-        title = title_dict.get('main')
-        search_title = title_dict.get('search', title)
-        clean_title = self.clean_string(title, [("'", "")])
-        self.destination_dir = [author, title]
-        if os.path.isdir(self.destination_dir):
-            self.logger.warning(f"Destination directory already exists: '{self.destination_dir}'")
-            return True
-        book_data = self.get_book_data_from_audible(author=author, title=search_title)
-        try:
-            date = book_data['release_date']
-            cover_image_url = book_data['product_images']['500']
-        except KeyError:
-            raise KeyError(f"Could not find date or cover image for '{title}'")
 
         headers = {}
         # cookie data
@@ -288,86 +287,119 @@ class TruAudiobook:
             '_ga': 'GA1.1.1381083922.1682810371',
             '_ga_K0KB8V5TMY': 'GS1.1.1684550382.66.1.1684550504.57.0.0',
         }
-        with tempfile.TemporaryDirectory(
-                prefix="tru_audiobook", suffix=clean_title.replace(" ", ""), dir=f"{expanduser('~')}/Downloads"
-        ) as tmp_download:
-            self.logger.info(f'Created temporary directory {tmp_download}')
-            if not os.path.isdir(tmp_download):
-                os.mkdir(tmp_download)
 
-            final_file = f"{tmp_download}/{clean_title}.mp3"
+        self.logger.info(f'Created temporary directory {download_dir}')
+        if not os.path.isdir(download_dir):
+            os.mkdir(download_dir)
 
-            # this will return a tuple of root and extension
-            file_parts = os.path.splitext(cover_image_url)
-            ext = file_parts[1]
-            cover_image_ext = ext if ext in ["jpg", "png"] else "jpg"
-            cover_image_file = f"{tmp_download}/cover.{cover_image_ext}"
+        final_file = f"{download_dir}/{clean_title}.mp3"
 
-            with open(cover_image_file, 'wb') as file_handle:
-                file_handle.write(requests.get(cover_image_url).content)
+        # this will return a tuple of root and extension
+        file_parts = os.path.splitext(cover_image_url)
+        ext = file_parts[1]
+        cover_image_ext = ext if ext in ["jpg", "png"] else "jpg"
+        cover_image_file = f"{download_dir}/cover.{cover_image_ext}"
 
-            all_found = True
-            input_files = []
-            durations = {}
-            for index, item in enumerate(spine):
-                part, _ = self.get_part(item['-odread-original-path'])
-                file_path = f"{tmp_download}/{part.lower()}"
-                input_files.append(f"file '{file_path}'")
-                durations[part] = float(item['audio-duration'])
-                url = f"https://ofs-{buid}.listen.overdrive.com/{item['path'].replace('%3D', '=')}"
-                if not os.path.isfile(file_path):
-                    self.logger.warning(f"Part NOT found: {file_path}")
+        with open(cover_image_file, 'wb') as file_handle:
+            file_handle.write(requests.get(cover_image_url).content)
 
-                    response = requests.get(
-                        url,
-                        cookies=cookies,
-                        headers=headers,
-                    )
+        all_found = True
+        input_files = []
+        durations = {}
+        for index, item in enumerate(spine):
+            part, _ = self.get_part(item['-odread-original-path'])
+            file_path = f"{download_dir}/{part.lower()}"
+            input_files.append(f"file '{file_path}'")
+            durations[part] = float(item['audio-duration'])
+            url = f"https://dewey-{buid}.listen.libbyapp.com/{item['path']}"
+            if not os.path.isfile(file_path):
+                self.logger.warning(f"Part NOT found: {file_path}")
 
-                    if response.status_code == 200:
-                        with open(file_path, 'wb') as file_handle:
-                            file_handle.write(response.content)
-                        self.logger.info(f"Downloaded part: {file_path}")
-                    else:
-                        all_found = False
-                        self.logger.error(f"Unable to download part: {url}")
+                response = requests.get(
+                    url,
+                    cookies=cookies,
+                    headers=headers,
+                )
 
-            if not all_found:
-                self.logger.error("Some parts are missing (see above) - download the missing parts and try again")
-                return False
+                if response.status_code == 200:
+                    with open(file_path, 'wb') as file_handle:
+                        file_handle.write(response.content)
+                    self.logger.info(f"Downloaded part: {file_path}")
+                else:
+                    all_found = False
+                    self.logger.error(f"Unable to download part: {url}")
 
-            file_list_file = f"{tmp_download}/files.txt"
-            with open(file_list_file, "w") as file_handle:
-                file_handle.write("\n".join(input_files))
+        if not all_found:
+            self.logger.error("Some parts are missing (see above) - download the missing parts and try again")
+            return False
 
-            if not os.path.isfile(final_file):
-                # merge the video files
-                cmd = [
-                    "ffmpeg", "-f", "concat", "-safe", "0", "-loglevel", "quiet", "-i", file_list_file, "-c", "copy", final_file
-                ]
+        file_list_file = f"{download_dir}/files.txt"
+        with open(file_list_file, "w") as file_handle:
+            file_handle.write("\n".join(input_files))
 
-                self.logger.info(f"Merging parts into '{final_file}'...")
-                if not self.dry_run:
-                    p = subprocess.Popen(cmd, stdin=subprocess.PIPE)
+        if not os.path.isfile(final_file):
+            # merge the video files
+            cmd = [
+                "ffmpeg", "-f", "concat", "-safe", "0", "-loglevel", "quiet", "-i", file_list_file, "-c", "copy",
+                final_file
+            ]
 
-                    fout = p.stdin
-                    fout.close()
-                    p.wait()
+            self.logger.info(f"Merging parts into '{final_file}'...")
+            if not self.dry_run:
+                p = subprocess.Popen(cmd, stdin=subprocess.PIPE)
 
-                    if p.returncode != 0:
-                        raise subprocess.CalledProcessError(p.returncode, cmd)
+                fout = p.stdin
+                fout.close()
+                p.wait()
 
-                self.logger.info(f"Merge complete")
+                if p.returncode != 0:
+                    raise subprocess.CalledProcessError(p.returncode, cmd)
 
-            self.convert_chapters(
-                chapters=self.compile_chapters(
-                    author=author,
-                    title=clean_title,
-                    date=date,
-                    toc=data['nav']['toc'],
-                    durations=durations,
-                ),
-                source_file=final_file,
-                cover_image_file=cover_image_file,
-            )
+            self.logger.info(f"Merge complete")
+
+        self.convert_chapters(
+            chapters=self.compile_chapters(
+                author=author,
+                title=clean_title,
+                date=date,
+                toc=data['nav']['toc'],
+                durations=durations,
+            ),
+            source_file=final_file,
+            cover_image_file=cover_image_file,
+        )
         return True
+
+    def process_contents(self, data: dict):
+        """
+        Process the contents of the audiobook
+        :param data: audiobook data
+        :return: True if successful, else False
+        """
+
+        author = self.get_author_from_data(data)
+        title_dict = data.get('title')
+        title = title_dict.get('main')
+        search_title = title_dict.get('search', title)
+        clean_title = self.clean_string(title, [("'", "")])
+        self.destination_dir = [author, title]
+        if not self.dev and os.path.isdir(self.destination_dir):
+            self.logger.warning(f"Destination directory already exists: '{self.destination_dir}'")
+            return True
+        book_data = self.get_book_data_from_audible(author=author, title=search_title)
+        try:
+            date = book_data['release_date']
+            cover_image_url = book_data['product_images']['500']
+        except KeyError:
+            raise KeyError(f"Could not find date or cover image for '{title}'")
+
+        if not self.dev:
+            with tempfile.TemporaryDirectory(
+                prefix="tru_audiobook",
+                suffix=clean_title.replace(" ", ""),
+                dir=f"{expanduser('~')}/Downloads",
+            ) as tmp_download:
+                return self.download_and_process(data, tmp_download, clean_title, cover_image_url, author, date)
+        else:
+            tmp_download = f"{expanduser('~')}/Downloads/tru_audiobook_{clean_title.replace(' ', '')}"
+            return self.download_and_process(data, tmp_download, clean_title, cover_image_url, author, date)

@@ -21,10 +21,10 @@ def parse_args():
     )
 
     parser.add_argument(
-        '-d', '--dry_run',
+        '-p', '--dry_run',
         action='store_true',
         dest='dry_run',
-        help='Dry run mode',
+        help='Practice/Dry run mode',
         default=False,
     )
 
@@ -41,6 +41,13 @@ def parse_args():
         action='store_true',
         dest='verbose',
         help='Enable verbose logging',
+    )
+
+    parser.add_argument(
+        '-d', '--dev',
+        action='store_true',
+        dest='dev',
+        help='Run a dev mode to iterate more efficiently',
     )
 
     parser.add_argument(
@@ -79,6 +86,7 @@ def main():
         dry_run=args.dry_run,
         quiet=args.quiet,
         verbose=args.verbose,
+        dev=args.dev,
         audible_authfile=args.audible_authfile,
         book_data_file=args.book_data_file,
         destination_dir=args.destination_dir,

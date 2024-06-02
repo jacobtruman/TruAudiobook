@@ -58,10 +58,10 @@ def parse_args():
     )
 
     parser.add_argument(
-        '-b', '--book_data_file',
-        dest='book_data_file',
-        help="Book data file",
-        default=os.environ.get('BOOK_DATA_FILE', "~/Audiobooks/book_data.json"),
+        '-b', '--book_data_dir',
+        dest='book_data_dir',
+        help="Book data directory",
+        default=os.environ.get('BOOK_DATA_DIR', "~/Audiobooks/book_data"),
     )
 
     parser.add_argument(
@@ -88,7 +88,7 @@ def main():
         verbose=args.verbose,
         dev=args.dev,
         audible_authfile=args.audible_authfile,
-        book_data_file=args.book_data_file,
+        book_data_dir=args.book_data_dir,
         destination_dir=args.destination_dir,
     )
 

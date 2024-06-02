@@ -155,4 +155,4 @@ cython_debug/
 # PyCharm
 .idea/
 
-book_data.json
+book_data/

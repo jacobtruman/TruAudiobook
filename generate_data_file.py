@@ -2,7 +2,7 @@ import base64
 import json
 import os
 
-from tru_audiobook import TruAudiobook, DEFAULT_BOOK_DATA_DIR
+from tru_audiobook import TruAudiobook
 from bs4 import BeautifulSoup
 
 # list of spine urls, collected one at a time, unfortunately
@@ -23,7 +23,11 @@ title = title_dict.get('main')
 search_title = title_dict.get('search', title)
 
 clean_title = TruAudiobook.clean_string(title, [("'", "")]).replace(" ", "_").lower()
-book_data_file = TruAudiobook.resolve_path(f'{DEFAULT_BOOK_DATA_DIR}/{clean_title}.json')
+book_data_file = TruAudiobook.resolve_path(f'./book_data/{clean_title}.json')
+data_dir = os.path.dirname(book_data_file)
+if not os.path.isdir(data_dir):
+    print(f'Creating directory {data_dir}')
+    os.mkdir(data_dir)
 
 crid = data["-odread-crid"][0].upper()
 
@@ -57,4 +61,5 @@ if os.path.isfile(book_data_file):
     print(f"File already exists: {book_data_file}")
     exit()
 with open(book_data_file, 'w') as file_handle:
+    print(f"Writing to {book_data_file}")
     json.dump(result, file_handle, indent=2)

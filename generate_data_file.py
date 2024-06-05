@@ -1,0 +1,60 @@
+import base64
+import json
+import os
+
+from tru_audiobook import TruAudiobook, DEFAULT_BOOK_DATA_DIR
+from bs4 import BeautifulSoup
+
+# list of spine urls, collected one at a time, unfortunately
+urls = [
+    "https://dewey-c140f6f4a91768f73ee2755a8cd11c32.listen.libbyapp.com/%7B2A0FC1B8-0F18-4F23-AC00-3998A787DA64%7DFmt425-Part01.mp3?cmpt=eyJzcGluZSI6MH0%3D--e01e25e3f5dc1789b702c7122b573373fea79df8",
+    "https://dewey-c140f6f4a91768f73ee2755a8cd11c32.listen.libbyapp.com/%7B2A0FC1B8-0F18-4F23-AC00-3998A787DA64%7DFmt425-Part02.mp3?cmpt=eyJzcGluZSI6MX0%3D--f2dcc17408b8266074bbd0c0da64763a36d479f2",
+]
+
+# table of contents html (ul element)
+toc_html = """<ul class="chapter-dialog-table">MORE CONTENTS HERE</ul>"""
+
+# the window.bData object from the page under "Developer Tools > Network" like this:
+# https://dewey-{BOOK ID STRING}.listen.libbyapp.com/?m={LONG BASE 64 ENCODED STRING}&s={SOME ID STRING}&p=lib-315
+data = json.loads("""JSON STRING HERE""")
+
+title_dict = data.get('title')
+title = title_dict.get('main')
+search_title = title_dict.get('search', title)
+
+clean_title = TruAudiobook.clean_string(title, [("'", "")]).replace(" ", "_").lower()
+book_data_file = TruAudiobook.resolve_path(f'{DEFAULT_BOOK_DATA_DIR}/{clean_title}.json')
+
+crid = data["-odread-crid"][0].upper()
+
+fields = ['title', 'creator', 'nav', 'spine', '-odread-buid', '-odread-bonafides-d', '-odread-crid']
+
+toc = []
+spine = []
+
+parsed_html = BeautifulSoup(toc_html, features="html.parser")
+for row in parsed_html.find_all('li', attrs={'class': 'chapter-dialog-row'}):
+    title = row.find('div', attrs={'class': 'chapter-dialog-row-title'}).text
+    timestamp = row.find('span', attrs={'class': 'place-phrase-visual'}).text
+    toc.append({"title": title, "timestamp": timestamp})
+
+for index, url in enumerate(urls):
+    spine_index = base64.b64encode("{{\"spine\":{index}}}".format(index=index).encode()).decode()
+    path_thing = f"{{{crid}}}Fmt425-Part{str((index + 1)).zfill(2)}.mp3?cmpt={spine_index}--{url.split('--')[-1]}"
+    spine.append({
+        "id": url.split('--')[-1]
+    })
+
+data["nav"]["toc"] = toc
+data["spine"] = spine
+
+result = {}
+for key, value in data.items():
+    if key in fields:
+        result[key] = value
+
+if os.path.isfile(book_data_file):
+    print(f"File already exists: {book_data_file}")
+    exit()
+with open(book_data_file, 'w') as file_handle:
+    json.dump(result, file_handle, indent=2)

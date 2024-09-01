@@ -253,13 +253,15 @@ class TruAudiobook:
         buid = data['-odread-buid']
         bonafides = data['-odread-bonafides-d']
         author = self.get_author_from_data(data)
-        title = data['title']['main']
+        title_dict = data.get('title')
+        title = title_dict.get('main')
+        search_title = title_dict.get('search', title)
         clean_title = self.clean_string(title, [("'", "")])
         self.destination_dir = [author, title]
         if os.path.isdir(self.destination_dir):
             self.logger.warning(f"Destination directory already exists: '{self.destination_dir}'")
             return True
-        book_data = self.get_book_data_from_audible(author=author, title=title)
+        book_data = self.get_book_data_from_audible(author=author, title=search_title)
         try:
             date = book_data['release_date']
             cover_image_url = book_data['product_images']['500']

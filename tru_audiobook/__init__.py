@@ -307,22 +307,19 @@ class TruAudiobook:
         headers = {}
         # cookie data
         cookies = {
-            '_gcl_au': '1.1.319448057.1682810371',
-            'od_track': '3',
-            '_ga_81HPB4CQ6L': 'GS1.1.1682810392.1.1.1682810435.17.0.0',
+            '_ga': 'GA1.1.542180755.1714618874',
             'bifocal%3A_bank-version': '%22b002%22',
             '_sscl_bifocal%3A_bank-version': '%22b002%22',
-            'bifocal%3Amigration%3Ab001': '{%22del%22:{}%2C%22add%22:{}%2C%22exp%22:1685402669394}',
-            '_sscl_bifocal%3Amigration%3Ab001': '{%22del%22:{}%2C%22add%22:{}%2C%22exp%22:1685402669394}',
-            'bifocal%3Adevice-id': '%22c788797d-0829-4483-9ae5-ccaaa77b2091%22',
-            '_sscl_bifocal%3Adevice-id': '%22c788797d-0829-4483-9ae5-ccaaa77b2091%22',
+            'bifocal%3Amigration%3Ab001': '{%22del%22:{}%2C%22add%22:{}%2C%22exp%22:1717278499669}',
+            '_sscl_bifocal%3Amigration%3Ab001': '{%22del%22:{}%2C%22add%22:{}%2C%22exp%22:1717278499669}',
+            'bifocal%3Adevice-id': '%22ca04a0d4-1580-4247-8930-2efd7ae04be8%22',
+            '_sscl_bifocal%3Adevice-id': '%22ca04a0d4-1580-4247-8930-2efd7ae04be8%22',
             'bifocal%3Aaudiobook%3Apbr': '1',
             '_sscl_bifocal%3Aaudiobook%3Apbr': '1',
-            '_gid': 'GA1.2.687037636.1684178026',
+            '_ga_WKH7FNBY8W': 'GS1.1.1715373567.5.1.1715373642.60.0.0',
+            '_ga_JFPV2QK2H1': 'GS1.1.1715373567.5.1.1715373642.0.0.1700230639',
             'd': bonafides,
             '_sscl_d': bonafides,
-            '_ga': 'GA1.1.1381083922.1682810371',
-            '_ga_K0KB8V5TMY': 'GS1.1.1684550382.66.1.1684550504.57.0.0',
         }
 
         self.logger.info(f'Created temporary directory {download_dir}')

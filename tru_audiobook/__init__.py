@@ -4,6 +4,7 @@ import re
 import subprocess
 import requests
 import tempfile
+from glob import glob
 from os.path import expanduser
 
 import ffmpeg
@@ -20,7 +21,7 @@ class TruAudiobook:
             verbose: bool = False,
             dev: bool = False,
             audible_authfile: str = '~/.config/truaudiobook/audible.json',
-            book_data_file: str = '~/Audiobooks/book_data.json',
+            book_data_dir: str = '~/Audiobooks/book_data',
             destination_dir: str = '~/Audiobooks',
     ):
         self.result = True
@@ -30,9 +31,10 @@ class TruAudiobook:
         self.quiet = quiet
         self.verbose = verbose
         self.dev = dev
-        self.book_data_file = book_data_file.replace('~', home)
+        self.book_data_dir = book_data_dir.replace('~', home)
         self.base_destination_dir = destination_dir.replace('~', home)
         self._destination_dir = None
+        self.book_data = []
 
         self.logger = trulogger.TruLogger({'verbose': verbose})
         self._set_log_prefix()
@@ -69,13 +71,35 @@ class TruAudiobook:
         stream = next((stream for stream in probe['streams'] if stream['codec_type'] == 'audio'), None)
         return float(stream['duration'])
 
+    @staticmethod
+    def _valid_book_data(book_data):
+        if isinstance(book_data, dict):
+            return book_data.get('active', True)
+        return False
+
+    def _add_valid_book_data(self, book_data):
+        if self._valid_book_data(book_data):
+            self.book_data.append(book_data)
+
+    def _collect_book_datas(self):
+        book_data_files = glob(f"{self.book_data_dir}/*.json")
+        for book_data_file in book_data_files:
+            with open(book_data_file) as data_file:
+                try:
+                    book_data = json.load(data_file)
+                    if isinstance(book_data, list):
+                        for _book_data in book_data:
+                            self._add_valid_book_data(_book_data)
+                    else:
+                        self._add_valid_book_data(book_data)
+                except json.JSONDecodeError as jerr:
+                    self.logger.error(f"Error loading JSON data from file {book_data_file}: {jerr}")
+
     def run(self):
-        with open(self.book_data_file) as data_file:
-            book_data_list = json.load(data_file)
-            for book_data in book_data_list:
-                if not book_data.get('active', True):
-                    continue
-                self.result = self.process_contents(data=book_data)
+        self._collect_book_datas()
+        for index, book_data in enumerate(self.book_data, 1):
+            self.logger.info(f"Processing book {index} / {len(self.book_data)}")
+            self.result = self.process_contents(data=book_data)
         return self.result
 
     def get_audible_client(self) -> audible.Client:
@@ -344,7 +368,14 @@ class TruAudiobook:
             part, _ = self.get_part(item['path'])
             file_path = f"{download_dir}/{part.lower()}"
             input_files.append(f"file '{file_path}'")
-            url = f"https://dewey-{buid}.listen.libbyapp.com/{item['path']}"
+            if data.get('overdrive', False):
+                prefix = "ofs"
+                domain = "listen.overdrive.com"
+            else:
+                prefix = "dewey"
+                domain = "listen.libbyapp.com"
+
+            url = f"https://{prefix}-{buid}.{domain}/{item['path']}"
             if not os.path.isfile(file_path):
                 self.logger.warning(f"Part NOT found: {file_path}")
 

@@ -106,6 +106,9 @@ class TruAudiobook:
 
     def run(self):
         self._collect_book_datas()
+        if len(self.book_data) == 0:
+            self.logger.error(f"No active book data found in directory: {self.book_data_dir}")
+            return False
         for index, book_data in enumerate(self.book_data, 1):
             self.logger.info(f"Processing book {index} / {len(self.book_data)}")
             self.result = self.process_contents(data=book_data)

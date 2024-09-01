@@ -2,10 +2,9 @@
 
 import os
 import sys
-import glob
 import argparse
 
-from tru_audiobook import TruAudiobook
+from tru_audiobook import TruAudiobook, DEFAULT_AUDIBLE_AUTHFILE, DEFAULT_BOOK_DATA_DIR, DEFAULT_DESTINATION_DIR
 
 
 def list_str(values):
@@ -54,21 +53,21 @@ def parse_args():
         '-a', '--audible_authfile',
         dest='audible_authfile',
         help="Audible authfile",
-        default=os.environ.get('AUDIBLE_AUTHFILE', "~/.config/truaudiobook/audible.json"),
+        default=os.environ.get('AUDIBLE_AUTHFILE', DEFAULT_AUDIBLE_AUTHFILE),
     )
 
     parser.add_argument(
         '-b', '--book_data_dir',
         dest='book_data_dir',
         help="Book data directory",
-        default=os.environ.get('BOOK_DATA_DIR', "~/Audiobooks/book_data"),
+        default=os.environ.get('BOOK_DATA_DIR', DEFAULT_BOOK_DATA_DIR),
     )
 
     parser.add_argument(
         '-m', '--destination_dir',
         dest='destination_dir',
         help="Media destination directory",
-        default=os.environ.get('DESTINATION_DIR', '~/Audiobooks'),
+        default=os.environ.get('DESTINATION_DIR', DEFAULT_DESTINATION_DIR),
     )
 
     args = parser.parse_args()

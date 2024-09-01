@@ -1,15 +1,21 @@
+import base64
 import json
 import os
 import re
 import subprocess
 import requests
 import tempfile
+import urllib.parse
 from glob import glob
 from os.path import expanduser
 
 import ffmpeg
 import audible
 import trulogger
+
+DEFAULT_AUDIBLE_AUTHFILE = '~/.config/truaudiobook/audible.json'
+DEFAULT_DESTINATION_DIR = '~/Audiobooks'
+DEFAULT_BOOK_DATA_DIR = f'~/{DEFAULT_DESTINATION_DIR}/book_data'
 
 
 class TruAudiobook:
@@ -20,19 +26,18 @@ class TruAudiobook:
             quiet: bool = False,
             verbose: bool = False,
             dev: bool = False,
-            audible_authfile: str = '~/.config/truaudiobook/audible.json',
-            book_data_dir: str = '~/Audiobooks/book_data',
-            destination_dir: str = '~/Audiobooks',
+            audible_authfile: str = DEFAULT_AUDIBLE_AUTHFILE,
+            book_data_dir: str = DEFAULT_BOOK_DATA_DIR,
+            destination_dir: str = DEFAULT_DESTINATION_DIR,
     ):
         self.result = True
-        home = expanduser("~")
-        self.audible_authfile = audible_authfile.replace('~', home)
+        self.audible_authfile = self.resolve_path(audible_authfile)
         self.dry_run = dry_run
         self.quiet = quiet
         self.verbose = verbose
         self.dev = dev
-        self.book_data_dir = book_data_dir.replace('~', home)
-        self.base_destination_dir = destination_dir.replace('~', home)
+        self.book_data_dir = self.resolve_path(book_data_dir)
+        self.base_destination_dir = self.resolve_path(destination_dir)
         self._destination_dir = None
         self.book_data = []
 
@@ -59,6 +64,10 @@ class TruAudiobook:
             elif isinstance(prefix, str):
                 _prefix += f"[ {prefix} ] "
         self.logger.set_prefix(_prefix)
+
+    @staticmethod
+    def resolve_path(path):
+        return os.path.abspath(os.path.expanduser(path))
 
     @staticmethod
     def _get_duration_ffmpeg(file_path):
@@ -310,7 +319,6 @@ class TruAudiobook:
             data: dict,
             download_dir: str,
             clean_title: str,
-            cover_image_url: str,
             author: str,
             date: str
     ) -> bool:
@@ -319,14 +327,14 @@ class TruAudiobook:
         :param data: audiobook data
         :param download_dir: Directory in which to download
         :param clean_title: Clean title
-        :param cover_image_url: Cover image url
         :param author: Author name
         :param date: Release date of audiobook
         :return: True if successful, else False
         """
         spine = data['spine']
+        crid = data["-odread-crid"][0].upper()
         buid = data['-odread-buid']
-        bonafides = data['-odread-bonafides-d']
+        bonafides = urllib.parse.quote(data['-odread-bonafides-d'])
 
         headers = {}
         # cookie data
@@ -346,12 +354,15 @@ class TruAudiobook:
             '_sscl_d': bonafides,
         }
 
-        self.logger.info(f'Created temporary directory {download_dir}')
         if not os.path.isdir(download_dir):
+            self.logger.info(f'Created {"download" if self.dev else "temporary"} directory {download_dir}')
             os.mkdir(download_dir)
+
+        self.logger.info(f'Downloading to directory {download_dir}')
 
         final_file = f"{download_dir}/{clean_title}.mp3"
 
+        cover_image_url = self._get_cover_image_url(data)
         # this will return a tuple of root and extension
         file_parts = os.path.splitext(cover_image_url)
         ext = file_parts[1]
@@ -365,8 +376,8 @@ class TruAudiobook:
         input_files = []
         durations = {}
         for index, item in enumerate(spine):
-            part, _ = self.get_part(item['path'])
-            file_path = f"{download_dir}/{part.lower()}"
+            part = f"Part{str((index + 1)).zfill(2)}"
+            file_path = f"{download_dir}/{part}.mp3"
             input_files.append(f"file '{file_path}'")
             if data.get('overdrive', False):
                 prefix = "ofs"
@@ -375,7 +386,15 @@ class TruAudiobook:
                 prefix = "dewey"
                 domain = "listen.libbyapp.com"
 
-            url = f"https://{prefix}-{buid}.{domain}/{item['path']}"
+            if "id" in item:
+                spine_index = base64.b64encode("{{\"spine\":{index}}}".format(index=index).encode()).decode()
+                url_path = f"{{{crid}}}Fmt425-{part}.mp3?cmpt={spine_index}--{item['id']}"
+            elif "path" in item:
+                url_path = item['path']
+            else:
+                self.logger.error(f"Unknown spine item: {item}")
+                continue
+            url = f"https://{prefix}-{buid}.{domain}/{url_path}"
             if not os.path.isfile(file_path):
                 self.logger.warning(f"Part NOT found: {file_path}")
 
@@ -438,6 +457,21 @@ class TruAudiobook:
         )
         return True
 
+    def _get_cover_image_url(self, data):
+        crid = data["-odread-crid"][0].upper()
+        crid0 = crid.split("-")[0]
+        crid1, crid2, crid3 = crid0[0:3], crid0[3:6], crid0[6:8]
+        url = 'https://libbyapp.com/covers/resize'
+        params = {
+            "type": "auto",
+            "width": 536,
+            "height": 536,
+            "quality": 80,
+            "force": True,
+            "url": f"%2FImageType-400%2F0293-1%2F{crid1}%2F{crid2}%2F{crid3}%2F%257B{crid}%257DImg400.jpg"
+        }
+        return f"{url}?{urllib.parse.urlencode(params)}"
+
     def process_contents(self, data: dict):
         """
         Process the contents of the audiobook
@@ -457,17 +491,16 @@ class TruAudiobook:
         book_data = self.get_book_data_from_audible(author=author, title=search_title)
         try:
             date = book_data['release_date']
-            cover_image_url = book_data['product_images']['500']
         except KeyError:
-            raise KeyError(f"Could not find date or cover image for '{title}'")
+            raise KeyError(f"Could not find date for '{title}'")
 
         if not self.dev:
             with tempfile.TemporaryDirectory(
                 prefix="tru_audiobook",
                 suffix=clean_title.replace(" ", ""),
-                dir=f"{expanduser('~')}/Downloads",
+                dir=self.resolve_path("~/Downloads"),
             ) as tmp_download:
-                return self.download_and_process(data, tmp_download, clean_title, cover_image_url, author, date)
+                return self.download_and_process(data, tmp_download, clean_title, author, date)
         else:
-            tmp_download = f"{expanduser('~')}/Downloads/tru_audiobook_{clean_title.replace(' ', '')}"
-            return self.download_and_process(data, tmp_download, clean_title, cover_image_url, author, date)
+            tmp_download = self.resolve_path(f"~/Downloads/tru_audiobook_{clean_title.replace(' ', '')}")
+            return self.download_and_process(data, tmp_download, clean_title, author, date)

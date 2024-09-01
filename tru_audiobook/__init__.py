@@ -6,6 +6,7 @@ import requests
 import tempfile
 from os.path import expanduser
 
+import ffmpeg
 import audible
 import trulogger
 
@@ -56,6 +57,17 @@ class TruAudiobook:
             elif isinstance(prefix, str):
                 _prefix += f"[ {prefix} ] "
         self.logger.set_prefix(_prefix)
+
+    @staticmethod
+    def _get_duration_ffmpeg(file_path):
+        """
+        Get duration of audio file
+        :param file_path: Path to audio file
+        :return: duration of audio file in seconds (float)
+        """
+        probe = ffmpeg.probe(file_path)
+        stream = next((stream for stream in probe['streams'] if stream['codec_type'] == 'audio'), None)
+        return float(stream['duration'])
 
     def run(self):
         with open(self.book_data_file) as data_file:
@@ -153,9 +165,29 @@ class TruAudiobook:
         _part = path[path.rfind('Part'):]
         if "#" in _part:
             parts = _part.split("#")
+        elif "?" in _part:
+            parts = _part.split("?")
         else:
             parts = [_part, 0]
         return parts
+
+    @staticmethod
+    def get_start(timestamp):
+        """
+        Get start from timestamp
+        :param timestamp:
+        :return:
+        """
+        timestamp_split = list(map(int, timestamp.split(":")))
+        if len(timestamp_split) == 2:
+            _hour = 0
+            _min, _sec = timestamp_split
+        elif len(timestamp_split) == 3:
+            _hour, _min, _sec = timestamp_split
+        else:
+            raise RuntimeError(f"Invalid timestamp format ({timestamp}); Should be in format: mm:ss or hh:mm:ss")
+
+        return _hour * 3600 + _min * 60 + _sec
 
     @staticmethod
     def clean_string(string: str, replaces: list = None):
@@ -213,12 +245,17 @@ class TruAudiobook:
                 continue
             track_num += 1
 
-            _part, _start = self.get_part(_item['path'])
-            if last_duration_part is None:
-                last_duration_part = _part
-            if durations[last_duration_part] != durations[_part]:
-                offset += durations[last_duration_part]
-                last_duration_part = _part
+            if "timestamp" in _item:
+                _start = self.get_start(_item['timestamp'])
+            elif "path" in _item:
+                _part, _start = self.get_part(_item['path'])
+                if last_duration_part is None:
+                    last_duration_part = _part
+                if durations[last_duration_part] != durations[_part]:
+                    offset += durations[last_duration_part]
+                    last_duration_part = _part
+            else:
+                raise Exception(f"Unknown chapter reference: {_item}")
             _start = float("{:.4f}".format(float(_start) + offset))
             chapters[chapter_title] = {
                 "title": chapter_title,
@@ -307,10 +344,9 @@ class TruAudiobook:
         input_files = []
         durations = {}
         for index, item in enumerate(spine):
-            part, _ = self.get_part(item['-odread-original-path'])
+            part, _ = self.get_part(item['path'])
             file_path = f"{download_dir}/{part.lower()}"
             input_files.append(f"file '{file_path}'")
-            durations[part] = float(item['audio-duration'])
             url = f"https://dewey-{buid}.listen.libbyapp.com/{item['path']}"
             if not os.path.isfile(file_path):
                 self.logger.warning(f"Part NOT found: {file_path}")
@@ -328,6 +364,10 @@ class TruAudiobook:
                 else:
                     all_found = False
                     self.logger.error(f"Unable to download part: {url}")
+
+            # don't want to rely on this being available or accurate; get it directly from the file
+            # durations[part] = float(item['audio-duration'])
+            durations[part] = self._get_duration_ffmpeg(file_path)
 
         if not all_found:
             self.logger.error("Some parts are missing (see above) - download the missing parts and try again")

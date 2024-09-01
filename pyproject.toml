@@ -3,7 +3,7 @@ requires = ["setuptools", "wheel"]
 
 [project]
 name = 'TruAudiobook'
-version = '0.0.3'
+version = '0.0.4'
 description='A tool for fetching audiobooks'
 
 authors = [
@@ -13,6 +13,7 @@ authors = [
 dependencies = [
     "requests",
     "audible>=0.8.2",
+    "ffmpeg-python>=0.2.0",
     "TruLogger",
 ]
 

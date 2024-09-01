@@ -15,7 +15,7 @@ import trulogger
 
 DEFAULT_AUDIBLE_AUTHFILE = '~/.config/truaudiobook/audible.json'
 DEFAULT_DESTINATION_DIR = '~/Audiobooks'
-DEFAULT_BOOK_DATA_DIR = f'~/{DEFAULT_DESTINATION_DIR}/book_data'
+DEFAULT_BOOK_DATA_DIR = f'{DEFAULT_DESTINATION_DIR}/book_data'
 
 
 class TruAudiobook:

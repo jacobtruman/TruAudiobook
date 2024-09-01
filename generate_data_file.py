@@ -6,17 +6,20 @@ from tru_audiobook import TruAudiobook
 from bs4 import BeautifulSoup
 
 # list of spine urls, collected one at a time, unfortunately
-urls = [
-    "https://dewey-c140f6f4a91768f73ee2755a8cd11c32.listen.libbyapp.com/%7B2A0FC1B8-0F18-4F23-AC00-3998A787DA64%7DFmt425-Part01.mp3?cmpt=eyJzcGluZSI6MH0%3D--e01e25e3f5dc1789b702c7122b573373fea79df8",
-    "https://dewey-c140f6f4a91768f73ee2755a8cd11c32.listen.libbyapp.com/%7B2A0FC1B8-0F18-4F23-AC00-3998A787DA64%7DFmt425-Part02.mp3?cmpt=eyJzcGluZSI6MX0%3D--f2dcc17408b8266074bbd0c0da64763a36d479f2",
-]
+# urls = [
+#     "https://dewey-c140f6f4a91768f73ee2755a8cd11c32.listen.libbyapp.com/%7B2A0FC1B8-0F18-4F23-AC00-3998A787DA64%7DFmt425-Part01.mp3?cmpt=eyJzcGluZSI6MH0%3D--e01e25e3f5dc1789b702c7122b573373fea79df8",
+#     "https://dewey-c140f6f4a91768f73ee2755a8cd11c32.listen.libbyapp.com/%7B2A0FC1B8-0F18-4F23-AC00-3998A787DA64%7DFmt425-Part02.mp3?cmpt=eyJzcGluZSI6MX0%3D--f2dcc17408b8266074bbd0c0da64763a36d479f2",
+# ]
+urls = os.environ.get('BOOK_URLS').split(',')
 
 # table of contents html (ul element)
-toc_html = """<ul class="chapter-dialog-table">MORE CONTENTS HERE</ul>"""
+toc_html = f"""{os.environ.get('BOOK_TOC')}"""
 
 # the window.bData object from the page under "Developer Tools > Network" like this:
 # https://dewey-{BOOK ID STRING}.listen.libbyapp.com/?m={LONG BASE 64 ENCODED STRING}&s={SOME ID STRING}&p=lib-315
-data = json.loads("""JSON STRING HERE""")
+data = json.loads(f"""{os.environ.get('BOOK_DATA')}""")
+# and window.tData
+tdata = json.loads(f"""{os.environ.get('BOOK_TDATA')}""")
 
 title_dict = data.get('title')
 title = title_dict.get('main')
@@ -56,6 +59,8 @@ result = {}
 for key, value in data.items():
     if key in fields:
         result[key] = value
+
+result["coverUrl"] = tdata.get("codex").get("title").get("cover").get("imageURL")
 
 if os.path.isfile(book_data_file):
     print(f"File already exists: {book_data_file}")

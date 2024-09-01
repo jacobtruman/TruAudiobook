@@ -122,7 +122,7 @@ class TruAudiobook:
         auth = audible.Authenticator.from_file(self.audible_authfile)
         return audible.Client(auth)
 
-    def get_book_data_from_audible(self, author: str, title: str) -> dict:
+    def get_book_data_from_audible(self, author: str, title: str, collection: str) -> dict:
         """
         Get book data from audible
         :param author: author
@@ -142,7 +142,9 @@ class TruAudiobook:
 
             book = {}
             for _book in books['products']:
-                if _book['title'].startswith(title):
+                if _book['title'].startswith(title) or (
+                        _book['title'].startswith(collection) and _book['title'].endswith(title)
+                ):
                     book = _book
                     break
             return book
@@ -365,15 +367,16 @@ class TruAudiobook:
 
         final_file = f"{download_dir}/{clean_title}.mp3"
 
-        cover_image_url = self._get_cover_image_url(data)
+        cover_image_url = data.get("coverUrl", self._get_cover_image_url(data))
         # this will return a tuple of root and extension
         file_parts = os.path.splitext(cover_image_url)
         ext = file_parts[1]
         cover_image_ext = ext if ext in ["jpg", "png"] else "jpg"
         cover_image_file = f"{download_dir}/cover.{cover_image_ext}"
 
-        with open(cover_image_file, 'wb') as file_handle:
-            file_handle.write(requests.get(cover_image_url).content)
+        if not os.path.isfile(cover_image_file):
+            with open(cover_image_file, 'wb') as file_handle:
+                file_handle.write(requests.get(cover_image_url).content)
 
         all_found = True
         input_files = []
@@ -471,7 +474,8 @@ class TruAudiobook:
             "height": 536,
             "quality": 80,
             "force": True,
-            "url": f"%2FImageType-400%2F0293-1%2F{crid1}%2F{crid2}%2F{crid3}%2F%257B{crid}%257DImg400.jpg"
+            # "url": f"%2FImageType-400%2F0293-1%2F{crid1}%2F{crid2}%2F{crid3}%2F%257B{crid}%257DImg400.jpg"
+            "url": f"/ImageType-400/1191-1/%7B{crid}%7DImg400.jpg"
         }
         return f"{url}?{urllib.parse.urlencode(params)}"
 
@@ -485,13 +489,14 @@ class TruAudiobook:
         author = self.get_author_from_data(data)
         title_dict = data.get('title')
         title = title_dict.get('main')
+        collection = title_dict.get('collection', None)
         search_title = title_dict.get('search', title)
         clean_title = self.clean_string(title, [("'", "")])
         self.destination_dir = [author, title]
         if not self.dev and os.path.isdir(self.destination_dir):
             self.logger.warning(f"Destination directory already exists: '{self.destination_dir}'")
             return True
-        book_data = self.get_book_data_from_audible(author=author, title=search_title)
+        book_data = self.get_book_data_from_audible(author=author, title=search_title, collection=collection)
         try:
             date = book_data['release_date']
         except KeyError:

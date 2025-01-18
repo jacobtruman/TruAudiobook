@@ -7,7 +7,6 @@ import requests
 import tempfile
 import urllib.parse
 from glob import glob
-from os.path import expanduser
 
 import ffmpeg
 import audible
@@ -122,11 +121,12 @@ class TruAudiobook:
         auth = audible.Authenticator.from_file(self.audible_authfile)
         return audible.Client(auth)
 
-    def get_book_data_from_audible(self, author: str, title: str, collection: str) -> dict:
+    def get_book_data_from_audible(self, author: str, title: str, series: str | None) -> dict:
         """
         Get book data from audible
         :param author: author
         :param title: title
+        :param series: series
         :return: book data
         """
         with self.get_audible_client() as client:
@@ -143,7 +143,7 @@ class TruAudiobook:
             book = {}
             for _book in books['products']:
                 if _book['title'].startswith(title) or (
-                        _book['title'].startswith(collection) and _book['title'].endswith(title)
+                        _book['title'].startswith(series) and _book['title'].endswith(title)
                 ):
                     book = _book
                     break
@@ -254,8 +254,8 @@ class TruAudiobook:
         :return: author
         """
         author = None
-        for item in data['creator']:
-            if item['role'] in ["author", "aut"]:
+        for item in data['creators']:
+            if item['role'].lower() in ["author", "aut"]:
                 author = item['name']
         return author
 
@@ -337,26 +337,13 @@ class TruAudiobook:
         :return: True if successful, else False
         """
         spine = data['spine']
-        crid = data["-odread-crid"][0].upper()
-        buid = data['-odread-buid']
-        bonafides = urllib.parse.quote(data['-odread-bonafides-d'])
+        crid = data['crid'].upper()
+        buid = data['buid']
 
         headers = {}
         # cookie data
         cookies = {
-            '_ga': 'GA1.1.542180755.1714618874',
-            'bifocal%3A_bank-version': '%22b002%22',
-            '_sscl_bifocal%3A_bank-version': '%22b002%22',
-            'bifocal%3Amigration%3Ab001': '{%22del%22:{}%2C%22add%22:{}%2C%22exp%22:1717278499669}',
-            '_sscl_bifocal%3Amigration%3Ab001': '{%22del%22:{}%2C%22add%22:{}%2C%22exp%22:1717278499669}',
-            'bifocal%3Adevice-id': '%22ca04a0d4-1580-4247-8930-2efd7ae04be8%22',
-            '_sscl_bifocal%3Adevice-id': '%22ca04a0d4-1580-4247-8930-2efd7ae04be8%22',
-            'bifocal%3Aaudiobook%3Apbr': '1',
-            '_sscl_bifocal%3Aaudiobook%3Apbr': '1',
-            '_ga_WKH7FNBY8W': 'GS1.1.1715373567.5.1.1715373642.60.0.0',
-            '_ga_JFPV2QK2H1': 'GS1.1.1715373567.5.1.1715373642.0.0.1700230639',
-            'd': bonafides,
-            '_sscl_d': bonafides,
+            'd': data['cookie_d'],
         }
 
         if not os.path.isdir(download_dir):
@@ -455,7 +442,7 @@ class TruAudiobook:
                 author=author,
                 title=clean_title,
                 date=date,
-                toc=data['nav']['toc'],
+                toc=data['toc'],
                 durations=durations,
             ),
             source_file=final_file,
@@ -463,8 +450,9 @@ class TruAudiobook:
         )
         return True
 
-    def _get_cover_image_url(self, data):
-        crid = data["-odread-crid"][0].upper()
+    @staticmethod
+    def _get_cover_image_url(data):
+        crid = data["crid"][0].upper()
         crid0 = crid.split("-")[0]
         crid1, crid2, crid3 = crid0[0:3], crid0[3:6], crid0[6:8]
         url = 'https://libbyapp.com/covers/resize'
@@ -487,16 +475,15 @@ class TruAudiobook:
         """
 
         author = self.get_author_from_data(data)
-        title_dict = data.get('title')
-        title = title_dict.get('main')
-        collection = title_dict.get('collection', None)
-        search_title = title_dict.get('search', title)
+        title = data.get('title')
+        series = data.get('series', None)
+        search_title = data.get('search_title', title)
         clean_title = self.clean_string(title, [("'", "")])
         self.destination_dir = [author, title]
         if not self.dev and os.path.isdir(self.destination_dir):
             self.logger.warning(f"Destination directory already exists: '{self.destination_dir}'")
             return True
-        book_data = self.get_book_data_from_audible(author=author, title=search_title, collection=collection)
+        book_data = self.get_book_data_from_audible(author=author, title=search_title, series=series)
         try:
             date = book_data['release_date']
         except KeyError:
